@@ -1,0 +1,66 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+btc = pd.read_csv("coinbaseUSD_1-min_data_2014-12-01_to_2019-01-09.csv")
+
+from datetime import datetime
+
+timestamp = pd.to_datetime(btc["Timestamp"], unit="s")
+
+btc["Date"] = timestamp.dt.date
+
+btc_gp = btc.groupby(["Date"])
+
+btc_df = btc_gp.agg({
+    "Open": np.min,
+    "Close": np.max,
+    "Volume_(Currency)": np.mean
+})
+
+btc_df["Date"] = btc_df.index
+
+btc_df["Day_30"] = 0
+btc_df["Std_5"] = 0
+btc_df["Std_365"] = 0
+btc_df["Vol_Std_30"] = 0
+
+btc_df["Day_30"] = btc_df["Close"].rolling(30).mean()
+btc_df["Day_30"] = btc_df["Day_30"].shift()
+
+btc_df["Std_5"] = btc_df["Close"].rolling(5).std()
+btc_df["Std_5"] = btc_df["Std_5"].shift()
+
+btc_df["Std_365"] = btc_df["Close"].rolling(365).std()
+btc_df["Std_365"] = btc_df["Std_365"].shift()
+
+btc_df["Std_Ratio"] = btc_df["Std_5"]/btc_df["Std_365"]
+
+btc_df["Vol_Std_5"] = btc_df["Volume_(Currency)"].rolling(5).std()
+btc_df["Vol_Std_5"] = btc_df["Vol_Std_5"].shift()
+
+btc_df["Vol_Std_365"] = btc_df["Volume_(Currency)"].rolling(365).std()
+btc_df["Vol_Std_365"] = btc_df["Vol_Std_365"].shift()
+
+btc_df["Vol_Std_Ratio"] = btc_df["Vol_Std_5"]/btc_df["Vol_Std_365"]
+
+btc_df = btc_df.dropna(axis=0)
+
+threshold = datetime(year=2017, month=1, day=2)
+
+from datetime import date
+
+train = btc_df[btc_df["Date"]<date(year=2017, month=1, day=2)]
+test = btc_df[btc_df["Date"]>date(year=2017, month=1, day=1)]
+
+features_1 = ["Day_30"]
+features_2 = ["Std_Ratio"]
+features_3 = ["Day_30", "Std_Ratio"]
+features_4 = ["Day_30", "Vol_Std_Ratio", "Std_Ratio"]
+
+lr = LinearRegression()
+lr.fit(train[features_4], train["Close"])
+predictions = lr.predict(test[features_4])
+mse = mean_squared_error(predictions, test["Close"])
+print(mse)
